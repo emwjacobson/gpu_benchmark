@@ -4,12 +4,11 @@
 #include <cublas_v2.h>
 
 // USE_HALF and USE_FLOAT are mutually exclusive. Only one can be used at a time.
-#define USE_HALF
-// #define USE_FLOAT
-#define USE_INT
+// #define USE_HALF
+#define USE_FLOAT
 
 #define EASY_COPY
-#define NUM_ITERATIONS 10
+#define NUM_ITERATIONS 20
 
 void fill_random(float* arr, int dim_size) {
     for(int i = 0; i < dim_size * dim_size; i++) {
@@ -38,8 +37,11 @@ int main() {
 
     // The max dimension of the matrix
     // eg if max_dim = 16, the max matrix size will be 16x16
-    int min_dim = 4096;
-    int max_dim = 1024*16;
+    int min_dim = 16384;
+    int max_dim = 16384;
+    // int max_dim = 1024*16;
+
+    // 128, 256, 512, 1024, 2048, 4096, 8192, 16384
 
 
 
@@ -118,10 +120,10 @@ int main() {
     float time_ms, final_time;
     double num_flop, final_flops;
     for(int i = min_dim; i <= max_dim; i*=2) {
-        #if defined(USE_FLOAT)
-            std::cout << "Running with size " << i << "... ";
-        #elif defined(USE_HALF)
+        #if defined(EASY_COPY)
             std::cout << i << "\t";
+        #else
+            std::cout << "Running with size " << i << "... ";
         #endif
         cudaEventRecord(gpu_start);
 
@@ -132,39 +134,41 @@ int main() {
                 cublasHgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, i, i, i, &alpha, d_A, i, d_B, i, &beta, d_C, i);
             #endif
         }
+
+        cudaEventRecord(gpu_stop);
+        cudaEventSynchronize(gpu_stop);
+        cudaEventElapsedTime(&time_ms, gpu_start, gpu_stop);
+
         // NOTE: I am not 100% certain on this formula.
         // https://math.stackexchange.com/a/2200792 has the math for AB, and I attempted to adapt it for aAB + bC
         // i^2 * (3i + 1)
         // num_flop = (unsigned long long)(i * i) * ((unsigned long long)(3 * i) + 1);
         num_flop = (unsigned long long)(i * i) * ((unsigned long long)(2 * i) - 1);
 
-        cudaEventRecord(gpu_stop);
-        cudaEventSynchronize(gpu_stop);
-        cudaEventElapsedTime(&time_ms, gpu_start, gpu_stop);
         final_time = ((time_ms / 1000.0) / NUM_ITERATIONS);
         final_flops = (num_flop / (double)final_time);
 
-        // Raw print (good for excel)
-        // std::cout << final_time << "\t" << final_flops;
-
-        // Pretty print (good for reading)
-        std::cout << "done (avg " << final_time << " seconds, ";
-        if (final_flops > 1000000000000.0) { // Tera Flops
-            printf("%.2f TFlops)", (final_flops / 1000000000000.0));
-            // std::cout << (final_flops / 1000000000000.0) << " TFlops)";
-        } else if (final_flops > 1000000000.0) { // Giga Flops
-            printf("%.2f GFlops)", (final_flops / 1000000000.0));
-            // std::cout << (final_flops / 1000000000.0) << " GFlops)";
-        } else if (final_flops > 1000000.0) { // Mega Flops
-            printf("%.2f MFlops)", (final_flops / 1000000.0));
-            // std::cout << (final_flops / 1000000.0) << " MFlops)";
-        } else if (final_flops > 1000.0) { // Kila Flops
-            printf("%.2f KFlops)", (final_flops / 1000.0));
-            // std::cout << (final_flops / 1000.0) << " KFlops)";
-        } else {
-            printf("%.2f Flops)", final_flops);
-            // std::cout << final_flops << " Flops)";
-        }
+        #if defined(EASY_COPY)
+            std::cout << final_time << "\t" << final_flops;
+        #else
+            std::cout << "done (avg " << final_time << " seconds, ";
+            if (final_flops > 1000000000000.0) { // Tera Flops
+                printf("%.2f TFlops)", (final_flops / 1000000000000.0));
+                // std::cout << (final_flops / 1000000000000.0) << " TFlops)";
+            } else if (final_flops > 1000000000.0) { // Giga Flops
+                printf("%.2f GFlops)", (final_flops / 1000000000.0));
+                // std::cout << (final_flops / 1000000000.0) << " GFlops)";
+            } else if (final_flops > 1000000.0) { // Mega Flops
+                printf("%.2f MFlops)", (final_flops / 1000000.0));
+                // std::cout << (final_flops / 1000000.0) << " MFlops)";
+            } else if (final_flops > 1000.0) { // Kila Flops
+                printf("%.2f KFlops)", (final_flops / 1000.0));
+                // std::cout << (final_flops / 1000.0) << " KFlops)";
+            } else {
+                printf("%.2f Flops)", final_flops);
+                // std::cout << final_flops << " Flops)";
+            }
+        #endif
 
 
         std::cout << std::endl;
